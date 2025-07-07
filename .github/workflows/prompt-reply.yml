@@ -1,0 +1,28 @@
+name: Prompt Reply Workflow
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'  # Run every 6 hours
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  process-prompt-replies:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Run Prompt Reply Action
+        uses: ./
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          data-repo: ${{ github.repository }}
+          workflow-type: 'prompt-reply' 

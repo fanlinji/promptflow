@@ -1,0 +1,19 @@
+name: 'Prompt Flow Action'
+description: 'Process issues and discussions with LLM APIs'
+inputs:
+  github-token:
+    description: 'GitHub token with repo scope'
+    required: true
+    default: ${{ github.token }}
+  data-repo:
+    description: 'Repository where issues and discussions are located (format: owner/repo)'
+    required: true
+  workflow-type:
+    description: 'Type of workflow to run (prompt-comment or prompt-reply)'
+    required: true
+runs:
+  using: 'node20'
+  main: 'src/index.js'
+branding:
+  icon: 'message-square'
+  color: 'blue' 
