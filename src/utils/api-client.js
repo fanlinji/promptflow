@@ -22,7 +22,7 @@ export function parseApiConfig(commentBody) {
     
     const [, key, value] = match;
     const trimmedKey = key.trim().toLowerCase();
-    const trimmedValue = value.trim().replace(/^['"]|['"]$/g, ''); // 移除引号
+    const trimmedValue = value.replace(/\r/g, '').trim().replace(/^['"]|['"]$/g, ''); // 移除引号
     
     if (trimmedKey.includes('name')) {
       config.name = trimmedValue;
