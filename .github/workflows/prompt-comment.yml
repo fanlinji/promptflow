@@ -23,6 +23,6 @@ jobs:
       - name: Run Prompt Comment Action
         uses: ./
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.PAT }}
           data-repo: jifanlin/new
           workflow-type: 'prompt-comment' 

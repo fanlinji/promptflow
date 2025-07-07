@@ -1,0 +1,17 @@
+name: 'Debug PAT Permissions'
+
+on:
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  debug-pat-job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Directly test the PAT with curl'
+        run: |
+          echo "--- 开始使用新的 DEBUG_PAT 直接测试 API ---"
+          curl --request GET \
+          --url "https://api.github.com/repos/jifanlin/new/issues?labels=api" \
+          --header "Authorization: Bearer ${{ secrets.DEBUG_PAT }}" \
+          --header "Accept: application/vnd.github.v3+json" \
+          -i
