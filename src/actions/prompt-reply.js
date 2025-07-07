@@ -103,35 +103,54 @@ async function loadPromptTemplates(github) {
   const templates = {};
   
   // 获取带有prompt和reply标签的issue
-  const issues = await github.getIssuesWithLabels(['prompt', 'reply']);
-  if (issues.length === 0) {
-    throw new Error('没有找到带有prompt和reply标签的issue');
-  }
-  
-  const issue = issues[0]; // 使用第一个issue
-  const comments = await github.getIssueComments(issue.number);
-  
-  // 将每条评论作为模板源处理
-  for (const comment of comments) {
-    // 跳过带有踩(👎)反应的评论
-    if (github.hasThumbsDownReaction(comment)) {
-      continue;
+  core.info('正在尝试获取带有prompt和reply标签的issues...');
+  try {
+    core.info('调用 getIssuesWithLabels 方法...');
+    const issues = await github.getIssuesWithLabels(['prompt', 'reply']);
+    core.info(`成功获取到 ${issues.length} 个带有prompt和reply标签的issues`);
+    
+    if (issues.length === 0) {
+      throw new Error('没有找到带有prompt和reply标签的issue');
     }
     
-    // 从评论中提取提示
-    const prompt = extractPrompt(comment.body);
-    if (!prompt) {
-      continue;
+    const issue = issues[0]; // 使用第一个issue
+    core.info(`使用issue #${issue.number}: ${issue.title}`);
+    
+    core.info(`正在获取issue #${issue.number}的评论...`);
+    const comments = await github.getIssueComments(issue.number);
+    core.info(`成功获取到 ${comments.length} 条评论`);
+    
+    // 将每条评论作为模板源处理
+    for (const comment of comments) {
+      // 跳过带有踩(👎)反应的评论
+      if (github.hasThumbsDownReaction(comment)) {
+        core.info(`跳过评论 ${comment.id}（已处理）`);
+        continue;
+      }
+      
+      // 从评论中提取提示
+      core.info(`正在从评论 ${comment.id} 中提取提示...`);
+      const prompt = extractPrompt(comment.body);
+      if (!prompt) {
+        core.info(`评论 ${comment.id} 中没有找到有效的提示格式`);
+        continue;
+      }
+      
+      core.info(`从评论 ${comment.id} 中提取到类型为 ${prompt.type} 的提示`);
+      // 存储模板及其评论ID，以便稍后标记
+      templates[prompt.type] = {
+        content: prompt.content,
+        id: comment.id
+      };
     }
     
-    // 存储模板及其评论ID，以便稍后标记
-    templates[prompt.type] = {
-      content: prompt.content,
-      id: comment.id
-    };
+    core.info(`总共加载了 ${Object.keys(templates).length} 个提示模板`);
+    return templates;
+  } catch (error) {
+    core.error(`加载提示模板失败: ${error.message}`);
+    core.error(`错误详情: ${JSON.stringify(error)}`);
+    throw error;
   }
-  
-  return templates;
 }
 
 /**

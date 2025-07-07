@@ -45,6 +45,24 @@ export function fillTemplate(template, content) {
 export function handleError(error, message) {
   const errorMessage = `${message}: ${error.message}`;
   core.error(errorMessage);
+  
+  // 记录更详细的错误信息
+  if (error.response) {
+    core.error(`HTTP状态码: ${error.response.status}`);
+    core.error(`响应头: ${JSON.stringify(error.response.headers)}`);
+    core.error(`响应体: ${JSON.stringify(error.response.data)}`);
+  }
+  
+  if (error.request) {
+    core.error(`请求URL: ${error.request.url || '未知'}`);
+    core.error(`请求方法: ${error.request.method || '未知'}`);
+  }
+  
+  // 记录错误堆栈
+  if (error.stack) {
+    core.error(`错误堆栈: ${error.stack}`);
+  }
+  
   core.setFailed(errorMessage);
 }
 

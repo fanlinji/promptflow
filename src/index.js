@@ -11,20 +11,27 @@ async function run() {
     const workflowType = core.getInput('workflow-type', { required: true });
     
     core.info(`开始执行${workflowType}工作流，仓库: ${repo}`);
+    core.info(`GitHub Token 长度: ${token.length}`);
+    core.info(`仓库格式检查: ${repo.includes('/') ? '有效' : '无效 - 缺少斜杠'}`);
     
     // 运行相应的工作流
     switch (workflowType) {
       case 'prompt-comment':
+        core.info(`准备执行 prompt-comment 工作流...`);
         await runPromptCommentAction(token, repo);
         break;
       case 'prompt-reply':
+        core.info(`准备执行 prompt-reply 工作流...`);
         await runPromptReplyAction(token, repo);
         break;
       default:
         throw new Error(`未知的工作流类型: ${workflowType}`);
     }
     
+    core.info(`${workflowType}工作流执行完成`);
+    
   } catch (error) {
+    core.error(`运行失败，错误详情: ${JSON.stringify(error, Object.getOwnPropertyNames(error))}`);
     handleError(error, '运行操作失败');
   }
 }

@@ -23,6 +23,6 @@ jobs:
       - name: Run Prompt Reply Action
         uses: ./
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          data-repo: ${{ github.repository }}
+          github-token: ${{ secrets.PAT }}
+          data-repo: jifanlin/new
           workflow-type: 'prompt-reply' 

@@ -6,8 +6,28 @@ import * as core from '@actions/core';
  */
 export class GitHubClient {
   constructor(token, repo) {
-    this.octokit = github.getOctokit(token);
+    core.info(`初始化GitHub客户端，仓库: ${repo}`);
+    
+    if (!token) {
+      core.error('GitHub令牌为空');
+      throw new Error('GitHub令牌不能为空');
+    }
+    
+    if (!repo || !repo.includes('/')) {
+      core.error(`仓库格式无效: ${repo}`);
+      throw new Error(`仓库格式无效，应为 'owner/repo': ${repo}`);
+    }
+    
     [this.owner, this.repo] = repo.split('/');
+    core.info(`仓库所有者: ${this.owner}, 仓库名称: ${this.repo}`);
+    
+    try {
+      this.octokit = github.getOctokit(token);
+      core.info('GitHub客户端初始化成功');
+    } catch (error) {
+      core.error(`GitHub客户端初始化失败: ${error.message}`);
+      throw error;
+    }
   }
 
   /**
@@ -30,16 +50,32 @@ export class GitHubClient {
    * @returns {Promise<Array>} - Issue对象数组
    */
   async getIssues(options = {}) {
-    const { data: issues } = await this.octokit.rest.issues.listForRepo({
-      owner: this.owner,
-      repo: this.repo,
-      state: options.state || 'open',
-      per_page: 100,
-      ...options
-    });
-    
-    // 过滤掉pull request
-    return issues.filter(issue => !issue.pull_request);
+    core.info(`正在获取仓库 ${this.owner}/${this.repo} 的issues，选项: ${JSON.stringify(options)}`);
+    try {
+      core.info(`API调用参数: owner=${this.owner}, repo=${this.repo}, state=${options.state || 'open'}, per_page=100`);
+      
+      const { data: issues } = await this.octokit.rest.issues.listForRepo({
+        owner: this.owner,
+        repo: this.repo,
+        state: options.state || 'open',
+        per_page: 100,
+        ...options
+      });
+      
+      core.info(`成功获取到 ${issues.length} 个issues`);
+      
+      // 过滤掉pull request
+      const filteredIssues = issues.filter(issue => !issue.pull_request);
+      core.info(`过滤后剩余 ${filteredIssues.length} 个issues（排除PR）`);
+      
+      return filteredIssues;
+    } catch (error) {
+      core.error(`获取issues失败: ${error.message}`);
+      core.error(`错误详情: ${JSON.stringify(error)}`);
+      core.error(`API URL: ${error.request?.url || '未知'}`);
+      core.error(`状态码: ${error.status || '未知'}`);
+      throw error;
+    }
   }
 
   /**
@@ -48,7 +84,15 @@ export class GitHubClient {
    * @returns {Promise<Array>} - Issue对象数组
    */
   async getIssuesWithLabels(labels) {
-    return this.getIssues({ labels: labels.join(',') });
+    core.info(`正在获取带有标签 ${labels.join(',')} 的issues`);
+    try {
+      const issues = await this.getIssues({ labels: labels.join(',') });
+      core.info(`成功获取到 ${issues.length} 个带有标签 ${labels.join(',')} 的issues`);
+      return issues;
+    } catch (error) {
+      core.error(`获取带有标签 ${labels.join(',')} 的issues失败: ${error.message}`);
+      throw error;
+    }
   }
 
   /**
