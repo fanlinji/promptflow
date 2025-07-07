@@ -2,8 +2,10 @@ name: Prompt Reply Workflow
 
 on:
   schedule:
-    - cron: '0 */6 * * *'  # Run every 6 hours
-  workflow_dispatch:  # Allow manual triggering
+    # [修改] 将 cron 表达式修改为 '0 18 * * *'
+    # 这对应的是 UTC 时间的每天18:00，即北京时间 (UTC+8) 的次日凌晨 2:00
+    - cron: '0 18 * * *'
+  workflow_dispatch:  # 保留手动触发功能
 
 jobs:
   process-prompt-replies:
