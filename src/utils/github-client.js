@@ -259,16 +259,24 @@ export class GitHubClient {
   }
 
   /**
-   * 获取讨论的评论
+   * 获取一个讨论下的所有评论（支持自动分页）
    * @param {number} discussionNumber - 讨论编号
-   * @returns {Promise<Array>} - 评论对象数组
+   * @returns {Promise<Array>} - 所有的评论对象数组
    */
   async getDiscussionComments(discussionNumber) {
-    const query = `
-      query($owner: String!, $repo: String!, $number: Int!) {
+    let allComments = [];
+    let hasNextPage = true;
+    let endCursor = null; // 用于分页的指针，初始为null
+
+    const queryTemplate = `
+      query($owner: String!, $repo: String!, $number: Int!, $cursor: String) {
         repository(owner: $owner, name: $repo) {
           discussion(number: $number) {
-            comments(first: 100) {
+            comments(first: 100, after: $cursor) {
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
               nodes {
                 id
                 body
@@ -286,7 +294,7 @@ export class GitHubClient {
                     }
                   }
                 }
-                reactions {
+                reactions(first: 100) {
                   nodes {
                     content
                   }
@@ -298,43 +306,39 @@ export class GitHubClient {
       }
     `;
 
-    const { repository } = await this.octokit.graphql(query, {
-      owner: this.owner,
-      repo: this.repo,
-      number: discussionNumber
-    });
+    core.info(`开始获取讨论 #${discussionNumber} 的所有评论（支持分页）...`);
+    
+    // 使用 while 循环，直到没有下一页为止
+    while (hasNextPage) {
+      const { repository } = await this.octokit.graphql(queryTemplate, {
+        owner: this.owner,
+        repo: this.repo,
+        number: discussionNumber,
+        cursor: endCursor // 传入当前页的末尾指针
+      });
 
-    return repository.discussion.comments.nodes;
-  }
-
-  /**
-   * 向讨论添加评论
-   * @param {string} discussionId - 讨论ID
-   * @param {string} body - 评论内容
-   * @returns {Promise<Object>} - 创建的评论对象
-   */
-  async addDiscussionComment(discussionId, body) {
-    const mutation = `
-      mutation($input: AddDiscussionCommentInput!) {
-        addDiscussionComment(input: $input) {
-          comment {
-            id
-            body
-          }
-        }
+      const discussion = repository.discussion;
+      if (!discussion || !discussion.comments) {
+        core.warning(`在讨论 #${discussionNumber} 中找不到评论，或返回格式异常。`);
+        break; 
       }
-    `;
 
-    const { addDiscussionComment } = await this.octokit.graphql(mutation, {
-      input: {
-        discussionId,
-        body
+      // 过滤掉可能存在的null节点
+      const newComments = discussion.comments.nodes.filter(node => node !== null);
+      allComments.push(...newComments);
+      
+      hasNextPage = discussion.comments.pageInfo.hasNextPage;
+      endCursor = discussion.comments.pageInfo.endCursor;
+      
+      if (hasNextPage) {
+        core.info(`已获取 ${allComments.length} 条评论，正在获取下一页...`);
       }
-    });
-
-    return addDiscussionComment.comment;
+    }
+    
+    core.info(`讨论 #${discussionNumber} 的评论全部获取完毕，共 ${allComments.length} 条。`);
+    return allComments;
   }
-
+  
   /**
    * 向讨论评论添加回复
    * @param {string} commentId - 评论ID
