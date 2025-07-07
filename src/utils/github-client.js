@@ -183,6 +183,18 @@ export class GitHubClient {
    * @returns {Promise<Object>} - 创建的讨论对象
    */
   async createDiscussion(title, body) {
+    // [新增] 首先，通过REST API获取仓库的完整信息，以得到正确的node_id
+    core.info(`正在获取仓库 ${this.owner}/${this.repo} 的 node_id...`);
+    const { data: repoData } = await this.octokit.rest.repos.get({
+      owner: this.owner,
+      repo: this.repo,
+    });
+    const repositoryId = repoData.node_id; // <-- 这是正确的、Base64编码的ID
+
+    if (!repositoryId) {
+      throw new Error(`无法获取仓库 ${this.owner}/${this.repo} 的 node_id`);
+    }
+    core.info(`成功获取到 repositoryId: ${repositoryId}`);
     // 首先，获取讨论分类ID
     const categoryQuery = `
       query($owner: String!, $repo: String!) {
@@ -226,7 +238,7 @@ export class GitHubClient {
 
     const { createDiscussion } = await this.octokit.graphql(createMutation, {
       input: {
-        repositoryId: `MDEwOlJlcG9zaXRvcnk${this.owner}/${this.repo}`,
+        repositoryId: repositoryId, // [修改] 使用我们刚刚获取的正确ID
         categoryId,
         title,
         body
