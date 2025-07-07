@@ -12,7 +12,8 @@ export function parseApiConfig(commentBody) {
   const config = {
     name: '',
     url: '',
-    keys: []
+    keys: [],
+    type: 'openai' // 默认为 'openai' 以保持向后兼容
   };
 
   const lines = commentBody.split('\n');
@@ -23,7 +24,6 @@ export function parseApiConfig(commentBody) {
     
     const [, key, value] = match;
     const trimmedKey = key.trim().toLowerCase();
-    // [修改] 增强了对回车符\r的清理
     const trimmedValue = value.replace(/\r/g, '').trim().replace(/^['"]|['"]$/g, '');
     
     if (trimmedKey.includes('name')) {
@@ -32,6 +32,8 @@ export function parseApiConfig(commentBody) {
       config.url = trimmedValue;
     } else if (trimmedKey.includes('key')) {
       config.keys.push(trimmedValue);
+    } else if (trimmedKey.includes('type')) {
+      config.type = trimmedValue.toLowerCase();
     }
   }
   
@@ -60,21 +62,16 @@ export function extractApiConfigs(comments) {
   return configs;
 }
 
-/**
- * 检查评论是否有踩(👎)反应
- * @param {Object} comment - 评论对象
- * @returns {boolean}
- */
 function hasThumbsDownReaction(comment) {
   if (!comment.reactions) return false;
   return comment.reactions['-1'] > 0;
 }
 
 /**
- * 调用LLM API并带有容错机制
+ * 调用LLM API（兼容OpenAI和Gemini）并带有容错机制
  * @param {Array} apiConfigs - API配置数组
- * @param {string} prompt - [修改] 直接接收原始的prompt字符串
- * @returns {Promise<Object>} - API响应
+ * @param {string} prompt - 原始的prompt字符串
+ * @returns {Promise<string>} - API响应中提取的文本
  */
 export async function callLlmApi(apiConfigs, prompt) {
   if (!apiConfigs || apiConfigs.length === 0) {
@@ -84,23 +81,25 @@ export async function callLlmApi(apiConfigs, prompt) {
   let lastError = null;
 
   for (const config of apiConfigs) {
-    core.debug(`尝试使用模型: ${config.name}`);
+    core.debug(`尝试使用模型: ${config.name} (类型: ${config.type})`);
     
-    // [修改] 在循环内部，根据当前模型动态创建请求数据
-    const requestData = formatApiRequest(prompt, config.name);
+    const requestData = formatApiRequest(prompt, config);
     
     for (const key of config.keys) {
       try {
-        const response = await axios.post(config.url, requestData, {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${key}`
-          },
-          timeout: 60000 
-        });
+        let url = config.url;
+        const headers = { 'Content-Type': 'application/json' };
+
+        if (config.type === 'gemini') {
+          url = `${config.url}?key=${key}`;
+        } else {
+          headers['Authorization'] = `Bearer ${key}`;
+        }
+        
+        const response = await axios.post(url, requestData, { headers, timeout: 60000 });
         
         core.debug(`API调用成功，使用模型: ${config.name}`);
-        return response.data;
+        return extractGeneratedText(response.data, config.type);
       } catch (error) {
         lastError = error;
         core.debug(`API调用失败，模型: ${config.name}, 密钥: ${key.substring(0, 3)}***, 错误: ${error.message}`);
@@ -112,37 +111,43 @@ export async function callLlmApi(apiConfigs, prompt) {
 }
 
 /**
- * 根据提示格式化API请求
+ * 根据提示和API类型格式化API请求
  * @param {string} prompt - 发送到API的提示
- * @param {string} modelName - [修改] 增加modelName参数
+ * @param {Object} config - 当前API的配置对象
  * @returns {Object} - 格式化的请求数据
  */
-export function formatApiRequest(prompt, modelName) {
-  return {
-    model: modelName, // [修改] 使用传入的modelName
-    messages: [
-      {
-        role: "user",
-        content: prompt
-      }
-    ],
-    temperature: 0.7,
-    max_tokens: 2000
-  };
+export function formatApiRequest(prompt, config) {
+  if (config.type === 'gemini') {
+    return {
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.7, maxOutputTokens: 20000 }
+    };
+  } else { // 默认或 'openai'
+    return {
+      model: config.name,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.7,
+      max_tokens: 20000
+    };
+  }
 }
 
 /**
  * 从API响应中提取生成的文本
  * @param {Object} apiResponse - API响应对象
+ * @param {string} type - API类型 ('openai' 或 'gemini')
  * @returns {string} - 提取的文本
  */
-export function extractGeneratedText(apiResponse) {
+export function extractGeneratedText(apiResponse, type) {
   try {
-    if (apiResponse.choices && apiResponse.choices.length > 0) {
-      if (apiResponse.choices[0].message) {
-        return apiResponse.choices[0].message.content;
-      } else if (apiResponse.choices[0].text) {
-        return apiResponse.choices[0].text;
+    if (type === 'gemini') {
+      if (apiResponse.candidates?.length > 0) {
+        return apiResponse.candidates[0].content.parts[0].text;
+      }
+      core.warning('Gemini 响应中未找到 candidates，可能已被安全策略阻止。');
+    } else { // 默认或 'openai'
+      if (apiResponse.choices?.length > 0) {
+        return apiResponse.choices[0].message?.content || apiResponse.choices[0].text || '';
       }
     }
     return JSON.stringify(apiResponse);
