@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import { GitHubClient } from '../utils/github-client.js';
-import { callLlmApi, formatApiRequest, extractGeneratedText } from '../utils/api-client.js';
+import { callLlmApi, extractGeneratedText } from '../utils/api-client.js';
 import { extractPrompt, handleError } from '../utils/helpers.js';
 
 /**
@@ -48,9 +48,8 @@ export async function runPromptCommentAction(token, repo) {
         core.info(`处理提示: ${prompt.type}`);
         
         try {
-          // 调用LLM API
-          const requestData = formatApiRequest(prompt.content);
-          const apiResponse = await callLlmApi(apiConfigs, requestData);
+          // [修改] 直接调用callLlmApi并传递prompt内容
+          const apiResponse = await callLlmApi(apiConfigs, prompt.content);
           const generatedText = extractGeneratedText(apiResponse);
           
           // 查找或创建与issue标题相同的讨论

@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import { GitHubClient } from '../utils/github-client.js';
-import { callLlmApi, formatApiRequest, extractGeneratedText } from '../utils/api-client.js';
+import { callLlmApi, extractGeneratedText } from '../utils/api-client.js';
 import { extractPrompt, fillTemplate, handleError } from '../utils/helpers.js';
 
 /**
@@ -58,8 +58,7 @@ export async function runPromptReplyAction(token, repo) {
             const filledPrompt = fillTemplate(template.content, commentBody);
             
             // 调用LLM API
-            const requestData = formatApiRequest(filledPrompt);
-            const apiResponse = await callLlmApi(apiConfigs, requestData);
+            const apiResponse = await callLlmApi(apiConfigs, filledPrompt);
             const generatedText = extractGeneratedText(apiResponse);
             
             // 向评论添加回复

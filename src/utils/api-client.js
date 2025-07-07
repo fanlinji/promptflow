@@ -1,3 +1,5 @@
+// src/utils/api-client.js
+
 import axios from 'axios';
 import * as core from '@actions/core';
 
@@ -16,13 +18,13 @@ export function parseApiConfig(commentBody) {
   const lines = commentBody.split('\n');
   
   for (const line of lines) {
-    // 匹配英文和中文冒号
     const match = line.match(/^(.*?)[:：](.*?)$/);
     if (!match) continue;
     
     const [, key, value] = match;
     const trimmedKey = key.trim().toLowerCase();
-    const trimmedValue = value.replace(/\r/g, '').trim().replace(/^['"]|['"]$/g, ''); // 移除引号
+    // [修改] 增强了对回车符\r的清理
+    const trimmedValue = value.replace(/\r/g, '').trim().replace(/^['"]|['"]$/g, '');
     
     if (trimmedKey.includes('name')) {
       config.name = trimmedValue;
@@ -43,18 +45,12 @@ export function parseApiConfig(commentBody) {
  */
 export function extractApiConfigs(comments) {
   const configs = [];
-  
-  // 按创建时间排序评论
-  const sortedComments = [...comments].sort((a, b) => 
-    new Date(a.created_at) - new Date(b.created_at)
-  );
+  const sortedComments = [...comments].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
   
   for (const comment of sortedComments) {
-    // 跳过带有踩(👎)反应的评论
     if (hasThumbsDownReaction(comment)) {
       continue;
     }
-    
     const config = parseApiConfig(comment.body);
     if (config.url && config.name && config.keys.length > 0) {
       configs.push(config);
@@ -67,7 +63,7 @@ export function extractApiConfigs(comments) {
 /**
  * 检查评论是否有踩(👎)反应
  * @param {Object} comment - 评论对象
- * @returns {boolean} - 如果评论有踩(👎)反应则返回true
+ * @returns {boolean}
  */
 function hasThumbsDownReaction(comment) {
   if (!comment.reactions) return false;
@@ -77,21 +73,22 @@ function hasThumbsDownReaction(comment) {
 /**
  * 调用LLM API并带有容错机制
  * @param {Array} apiConfigs - API配置数组
- * @param {Object} requestData - API请求数据
+ * @param {string} prompt - [修改] 直接接收原始的prompt字符串
  * @returns {Promise<Object>} - API响应
  */
-export async function callLlmApi(apiConfigs, requestData) {
+export async function callLlmApi(apiConfigs, prompt) {
   if (!apiConfigs || apiConfigs.length === 0) {
     throw new Error('没有可用的API配置');
   }
 
   let lastError = null;
 
-  // 按顺序尝试每个模型
   for (const config of apiConfigs) {
     core.debug(`尝试使用模型: ${config.name}`);
     
-    // 尝试当前模型的每个密钥
+    // [修改] 在循环内部，根据当前模型动态创建请求数据
+    const requestData = formatApiRequest(prompt, config.name);
+    
     for (const key of config.keys) {
       try {
         const response = await axios.post(config.url, requestData, {
@@ -99,7 +96,7 @@ export async function callLlmApi(apiConfigs, requestData) {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${key}`
           },
-          timeout: 60000 // 60秒超时
+          timeout: 60000 
         });
         
         core.debug(`API调用成功，使用模型: ${config.name}`);
@@ -107,23 +104,22 @@ export async function callLlmApi(apiConfigs, requestData) {
       } catch (error) {
         lastError = error;
         core.debug(`API调用失败，模型: ${config.name}, 密钥: ${key.substring(0, 3)}***, 错误: ${error.message}`);
-        // 继续尝试下一个密钥或模型
       }
     }
   }
 
-  // 如果执行到这里，所有模型和密钥都已失败
   throw new Error(`所有API调用都失败了。最后一个错误: ${lastError?.message || '未知错误'}`);
 }
 
 /**
  * 根据提示格式化API请求
  * @param {string} prompt - 发送到API的提示
+ * @param {string} modelName - [修改] 增加modelName参数
  * @returns {Object} - 格式化的请求数据
  */
-export function formatApiRequest(prompt) {
+export function formatApiRequest(prompt, modelName) {
   return {
-    model: "gpt-3.5-turbo", // 这将被API端点覆盖
+    model: modelName, // [修改] 使用传入的modelName
     messages: [
       {
         role: "user",
@@ -142,7 +138,6 @@ export function formatApiRequest(prompt) {
  */
 export function extractGeneratedText(apiResponse) {
   try {
-    // 处理不同的API响应格式
     if (apiResponse.choices && apiResponse.choices.length > 0) {
       if (apiResponse.choices[0].message) {
         return apiResponse.choices[0].message.content;
@@ -150,11 +145,9 @@ export function extractGeneratedText(apiResponse) {
         return apiResponse.choices[0].text;
       }
     }
-    
-    // 备用方案：返回字符串化的响应
     return JSON.stringify(apiResponse);
   } catch (error) {
     core.warning(`从API响应中提取文本失败: ${error.message}`);
     return JSON.stringify(apiResponse);
   }
-} 
+}
