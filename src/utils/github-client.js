@@ -219,8 +219,18 @@ export class GitHubClient {
       throw new Error('仓库中没有找到讨论分类');
     }
 
-    // 使用第一个分类（通常是"General"）
-    const categoryId = categories[0].id;
+    // [修改] 不再使用第一个分类，而是按名称查找 "General" 分类
+    core.info(`可用的讨论分类: ${categories.map(c => c.name).join(', ')}`);
+    const generalCategory = categories.find(cat => cat.name === 'General');
+
+    if (!generalCategory) {
+      // 如果找不到 "General"，就报错并提示用户
+      throw new Error('在仓库中没有找到名为 "General" 的讨论分类。请确保该分类存在。');
+    }
+    
+    // 使用 "General" 分类的 ID
+    const categoryId = generalCategory.id;
+    core.info(`已选择分类 "General"，ID为: ${categoryId}`);
 
     // 创建讨论
     const createMutation = `
