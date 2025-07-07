@@ -63,7 +63,7 @@ export async function runPromptReplyAction(token, repo) {
             
             // 向评论添加回复
             core.info(`使用模板${templateType}向评论${comment.id}添加回复`);
-            await github.addDiscussionReply(comment.id, generatedText);
+            await github.addDiscussionReply(discussion.id, comment.id, generatedText);
             
             // 标记模板为已使用
             usedTemplateIds.add(template.id);

@@ -338,18 +338,21 @@ export class GitHubClient {
     core.info(`讨论 #${discussionNumber} 的评论全部获取完毕，共 ${allComments.length} 条。`);
     return allComments;
   }
-  
+
   /**
    * 向讨论评论添加回复
-   * @param {string} commentId - 评论ID
+   * @param {string} discussionId - [修改] 需要讨论的ID
+   * @param {string} commentId - 要回复的评论ID
    * @param {string} body - 回复内容
    * @returns {Promise<Object>} - 创建的回复对象
    */
-  async addDiscussionReply(commentId, body) {
+  async addDiscussionReply(discussionId, commentId, body) {
+    // [修改] 不再使用虚构的 addDiscussionCommentReply
+    // 而是使用 addDiscussionComment，并附带 replyToId 参数
     const mutation = `
-      mutation($input: AddDiscussionCommentReplyInput!) {
-        addDiscussionCommentReply(input: $input) {
-          reply {
+      mutation($input: AddDiscussionCommentInput!) {
+        addDiscussionComment(input: $input) {
+          comment {
             id
             body
           }
@@ -357,15 +360,17 @@ export class GitHubClient {
       }
     `;
 
-    const { addDiscussionCommentReply } = await this.octokit.graphql(mutation, {
+    const { addDiscussionComment } = await this.octokit.graphql(mutation, {
       input: {
-        commentId,
+        discussionId,
+        replyToId: commentId,
         body
       }
     });
 
-    return addDiscussionCommentReply.reply;
+    return addDiscussionComment.comment;
   }
+  
 
   /**
    * 向issue评论添加踩(👎)反应
