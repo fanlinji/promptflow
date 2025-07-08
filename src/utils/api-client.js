@@ -76,47 +76,33 @@ function hasThumbsDownReaction(comment) {
  * @param {string} [mimeType] - 可选的文件的MIME类型
  * @returns {Promise<string>} - API响应中提取的文本
  */
-export async function callLlmApi(config, prompt, fileBuffer, mimeType) {
-  // 目前只演示了 Gemini File API 的情况
-  if (config.type !== 'gemini' || !config.key) {
+export async function callLlmApi(apiConfigs, prompt, fileBuffer, mimeType) {
+  core.info(`[关键日志 2] callLlmApi 收到的最终配置列表: ${JSON.stringify(apiConfigs, null, 2)}`);
+
+  const geminiConfig = apiConfigs.find(c => c.type === 'gemini');
+  if (!geminiConfig || geminiConfig.keys.length === 0) {
     throw new Error('当前实现只支持带有有效key的Gemini File API');
   }
+  const apiKey = geminiConfig.keys[0];
+  const modelName = geminiConfig.name;
 
   try {
-    const genAI = new GoogleGenerativeAI(config.key);
-    const model = genAI.getGenerativeModel({ model: config.name });
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: modelName });
+    const promptParts = [{ text: prompt }];
 
-    let promptParts = [prompt];
-
-    // 如果有文件，先上传文件
     if (fileBuffer && mimeType) {
-      core.info(`正在上传 ${mimeType} 文件到 Google...`);
-      // 注意：这只是一个示例流程，实际的SDK用法可能需要你先上传文件，拿到句柄
-      // Google AI Studio SDK v1.5+ 支持直接发送文件内容
-      const filePart = {
-        inlineData: {
-          data: fileBuffer.toString("base64"),
-          mimeType
-        },
-      };
-      promptParts.unshift(filePart); // 将文件放在提示内容前面
-      core.info('文件上传成功，准备生成内容...');
+      core.info(`正在准备上传 ${mimeType} 文件...`);
+      promptParts.push({ inlineData: { data: fileBuffer.toString("base64"), mimeType } });
     }
     
-    const result = await model.generateContent({
-        contents: [{ role: "user", parts: promptParts.map(p => typeof p === 'string' ? {text: p} : p) }]
-    });
-
+    const result = await model.generateContent({ contents: [{ role: "user", parts: promptParts }] });
     const response = result.response;
     const text = response.text();
     core.info('成功从 Gemini 获取到内容。');
     return text;
-
   } catch (error) {
     core.error(`调用 Gemini API 失败: ${error.message}`);
-    if (error.response) {
-        core.error(`错误详情: ${JSON.stringify(error.response.data)}`);
-    }
     throw error;
   }
 }
