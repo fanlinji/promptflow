@@ -49,8 +49,14 @@ export async function runPromptCommentAction(token, repo) {
         
         try {
           // [修改] 直接调用callLlmApi并传递prompt内容
-          const apiResponse = await callLlmApi(apiConfigs, prompt.content);
-          const generatedText = extractGeneratedText(apiResponse);
+          // const apiResponse = await callLlmApi(apiConfigs, prompt.content);
+          // const generatedText = extractGeneratedText(apiResponse);
+
+          // 这是修改后的代码
+          let generatedText = await callLlmApi(apiConfigs, prompt.content);
+
+          // [推荐] 对最终文本进行清理，去除首尾可能存在的换行符或空格
+          generatedText = generatedText.trim();
           
           // 查找或创建与issue标题相同的讨论
           let discussion = await github.getDiscussionByTitle(issue.title);
@@ -64,8 +70,8 @@ export async function runPromptCommentAction(token, repo) {
           await github.addDiscussionComment(discussion.id, generatedText);
           
           // 将评论标记为已处理
-          core.info(`将评论${comment.id}标记为已处理`);
-          await github.addThumbsDownToIssueComment(comment.id);
+          // core.info(`将评论${comment.id}标记为已处理`);
+          // await github.addThumbsDownToIssueComment(comment.id);
           
         } catch (error) {
           core.warning(`处理评论${comment.id}时出错: ${error.message}`);

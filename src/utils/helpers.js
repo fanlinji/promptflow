@@ -2,12 +2,13 @@ import * as core from '@actions/core';
 
 /**
  * 使用正则表达式从评论内容中提取提示
+ * 新规则: 指令词: (两个空格)(换行) 内容
  * @param {string} commentBody - 评论内容
  * @returns {Object|null} - 包含类型和内容的对象，如果没有匹配则为null
  */
 export function extractPrompt(commentBody) {
-  // 匹配英文和中文冒号
-  const regex = /^(\w+Prompt)[:：]([\s\S]*)$/;
+  // 匹配规则：以 "XxxPrompt:" 开头，后跟两个空格，再跟一个换行，然后是所有内容
+  const regex = /^(\w+Prompt)[:：]  \r?\n([\s\S]*)$/;
   const match = commentBody.match(regex);
   
   if (!match) {
@@ -16,7 +17,7 @@ export function extractPrompt(commentBody) {
   
   return {
     type: match[1],
-    content: match[2].trim()
+    content: match[2].trim() // .trim() 仍然保留，以清理内容部分首尾的空白
   };
 }
 

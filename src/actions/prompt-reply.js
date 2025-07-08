@@ -58,8 +58,15 @@ export async function runPromptReplyAction(token, repo) {
             const filledPrompt = fillTemplate(template.content, commentBody);
             
             // 调用LLM API
-            const apiResponse = await callLlmApi(apiConfigs, filledPrompt);
-            const generatedText = extractGeneratedText(apiResponse);
+            // [修改] 直接调用callLlmApi并传递prompt内容
+            // const apiResponse = await callLlmApi(apiConfigs, prompt.content);
+            // const generatedText = extractGeneratedText(apiResponse);
+
+            // 这是修改后的代码
+            let generatedText = await callLlmApi(apiConfigs, prompt.content);
+
+            // [推荐] 对最终文本进行清理，去除首尾可能存在的换行符或空格
+            generatedText = generatedText.trim();
             
             // 向评论添加回复
             core.info(`使用模板${templateType}向评论${comment.id}添加回复`);
@@ -75,16 +82,16 @@ export async function runPromptReplyAction(token, repo) {
           }
         }
         
-        // 只有当所有模板都成功时，才将评论标记为已处理
-        if (allTemplatesSucceeded) {
-          core.info(`将评论${comment.id}标记为已处理`);
-          await github.addThumbsDownToDiscussionComment(comment.id);
-        }
+        // [修改] 已注释掉自动为 discussion comment 添加 👎 的代码块
+        // if (allTemplatesSucceeded) {
+        //   core.info(`将评论${comment.id}标记为已处理`);
+        //   await github.addThumbsDownToDiscussionComment(comment.id);
+        // }
       }
     }
     
-    // 将使用过的模板标记为已处理
-    await markUsedTemplatesAsProcessed(github, usedTemplateIds);
+    // [修改] 已注释掉自动为 templates 添加 👎 的代码行
+    // await markUsedTemplatesAsProcessed(github, usedTemplateIds);
     
     core.info('prompt-reply工作流成功完成');
     
