@@ -57,9 +57,12 @@ export async function runPromptReplyAction(token, repo) {
           if (fileUrl && fileUrl.endsWith('.pdf')) {
             core.info('在评论中找到 PDF 文件链接，开始下载和解析...');
             const fileBuffer = await github.downloadFile(fileUrl);
+
+            // [新增] 将 Node.js 的 Buffer 对象，转换为 pdfjs-dist 需要的 Uint8Array 标准格式
+            const uint8Array = new Uint8Array(fileBuffer);
             
             // [修改] 使用 pdfjs-dist 的新方法来解析PDF
-            const doc = await pdfjsLib.getDocument({ data: fileBuffer }).promise;
+            const doc = await pdfjsLib.getDocument({ data: uint8Array }).promise;
             core.info(`PDF 文件解析成功，共 ${doc.numPages} 页。正在提取文本...`);
             
             let fullText = '';
