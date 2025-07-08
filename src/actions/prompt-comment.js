@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import { GitHubClient } from '../utils/github-client.js';
-import { callLlmApi, extractGeneratedText } from '../utils/api-client.js';
+import { callLlmApi } from '../utils/api-client.js';
 import { extractPrompt, handleError } from '../utils/helpers.js';
 
 /**
@@ -48,10 +48,7 @@ export async function runPromptCommentAction(token, repo) {
         core.info(`处理提示: ${prompt.type}`);
         
         try {
-          // [修改] 直接调用callLlmApi并传递prompt内容
-          // const apiResponse = await callLlmApi(apiConfigs, prompt.content);
-          // const generatedText = extractGeneratedText(apiResponse);
-
+          
           // 这是修改后的代码
           let generatedText = await callLlmApi(apiConfigs, prompt.content);
 
