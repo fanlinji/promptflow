@@ -2,7 +2,8 @@ import * as core from '@actions/core';
 import { GitHubClient } from '../utils/github-client.js';
 import { callLlmApi } from '../utils/api-client.js';
 import { extractPrompt, fillTemplate, handleError, extractFileUrl } from '../utils/helpers.js';
-import pdf from 'pdf-parse';
+// [修改] 引入新的、可靠的PDF解析库
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 /**
  * 处理prompt-reply工作流
@@ -13,29 +14,35 @@ export async function runPromptReplyAction(token, repo) {
   try {
     const github = new GitHubClient(token, repo);
     
+    // 获取API配置
     core.info('正在获取API配置...');
     const apiConfigs = await github.getApiConfigs();
     core.info(`找到${apiConfigs.length}个API配置`);
     
+    // 加载提示模板
     core.info('正在加载提示模板...');
     const promptTemplates = await loadPromptTemplates(github);
     core.info(`找到${Object.keys(promptTemplates).length}个提示模板`);
     
-    core.info('正在获取所有讨论...');
+    // 获取所有讨论
+    core.info('正在获取讨论...');
     const discussions = await github.getDiscussions();
     core.info(`找到${discussions.length}个讨论`);
     
+    // 跟踪使用过的模板ID，以便后续手动标记
     const usedTemplateIds = new Set();
     
+    // 处理每个讨论
     for (const discussion of discussions) {
       core.info(`处理讨论 #${discussion.number}: ${discussion.title}`);
       
       const comments = await github.getDiscussionComments(discussion.number);
       core.info(`在讨论 #${discussion.number} 中找到${comments.length}条评论`);
       
+      // 处理每条评论
       for (const comment of comments) {
         if (github.hasDiscussionThumbsDownReaction(comment)) {
-          core.info(`跳过评论 ${comment.id}（已处理）`);
+          core.info(`跳过评论 ${comment.id}（已手动标记为已处理）`);
           continue;
         }
         
@@ -50,21 +57,31 @@ export async function runPromptReplyAction(token, repo) {
           if (fileUrl && fileUrl.endsWith('.pdf')) {
             core.info('在评论中找到 PDF 文件链接，开始下载和解析...');
             const fileBuffer = await github.downloadFile(fileUrl);
-            const data = await pdf(fileBuffer);
-            contextContent = data.text; // PDF 的文本内容成为上下文
-            core.info(`PDF 文件解析成功，共 ${data.numpages} 页。`);
+            
+            // [修改] 使用 pdfjs-dist 的新方法来解析PDF
+            const doc = await pdfjsLib.getDocument({ data: fileBuffer }).promise;
+            core.info(`PDF 文件解析成功，共 ${doc.numPages} 页。正在提取文本...`);
+            
+            let fullText = '';
+            for (let i = 1; i <= doc.numPages; i++) {
+              const page = await doc.getPage(i);
+              const textContent = await page.getTextContent();
+              const pageText = textContent.items.map(item => item.str).join(' ');
+              fullText += pageText + '\n\n'; // 每页内容后加换行
+            }
+            contextContent = fullText;
+            core.info(`PDF 文本提取完毕。`);
+
           } else {
             core.info('评论中未找到 PDF 文件，将使用评论本身作为内容。');
-            contextContent = comment.body; // 如果没有文件，则使用评论原文作为上下文
+            contextContent = comment.body; 
           }
 
           let allTemplatesSucceeded = true;
           for (const [templateType, template] of Object.entries(promptTemplates)) {
             try {
-              // 用提取出的内容（PDF文本或评论原文）填充模板
               const filledPrompt = fillTemplate(template.content, contextContent);
               
-              // 正确调用LLM API
               let generatedText = await callLlmApi(apiConfigs, filledPrompt);
               generatedText = generatedText.trim();
               
@@ -72,14 +89,13 @@ export async function runPromptReplyAction(token, repo) {
               await github.addDiscussionReply(discussion.id, comment.id, generatedText);
               
               usedTemplateIds.add(template.id);
-              
             } catch (error) {
               core.warning(`将模板 ${templateType} 应用于评论 ${comment.id} 时出错: ${error.message}`);
               allTemplatesSucceeded = false;
             }
           }
           
-          // 已根据你的要求，移除自动标记 discussion comment 的功能
+          // 根据你的要求，已移除自动标记 discussion comment 的功能
           
         } catch (error) {
           core.warning(`处理评论 ${comment.id} 时发生顶层错误: ${error.message}`);
@@ -87,7 +103,7 @@ export async function runPromptReplyAction(token, repo) {
       }
     }
     
-    // 已根据你的要求，移除自动标记 template 的功能
+    // 根据你的要求，已移除自动标记 template 的功能
     // await markUsedTemplatesAsProcessed(github, usedTemplateIds);
     
     core.info('prompt-reply工作流成功完成');
@@ -127,9 +143,6 @@ async function loadPromptTemplates(github) {
       continue;
     }
     
-    // 使用 source.id (数字ID) 或 source.node_id (全局ID) 均可，取决于标记函数需要哪个
-    // 我们的 addThumbsDownToIssueComment 需要的是数字ID (comment_id 或 issue_id)
-    // 但我们的标记功能已经移除了，所以这里暂时不重要
     templates[prompt.type] = {
       content: prompt.content,
       id: source.id 
@@ -149,9 +162,11 @@ async function markUsedTemplatesAsProcessed(github, usedTemplateIds) {
   
   for (const id of usedTemplateIds) {
     try {
+      // 这里的ID可能是issue的ID或comment的ID，需要区分处理
+      // 但由于函数已不被调用，此处的逻辑暂时保留
       await github.addThumbsDownToIssueComment(id);
     } catch (error) {
-      core.warning(`将模板${id}标记为已处理时出错: ${error.message}`);
+      core.warning(`将模板源 ${id} 标记为已处理时出错: ${error.message}`);
     }
   }
 }
