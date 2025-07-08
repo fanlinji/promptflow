@@ -2,6 +2,7 @@
 
 import * as github from '@actions/github';
 import * as core from '@actions/core';
+import axios from 'axios'; // <-- 确保引入 axios
 
 /**
  * GitHub客户端类，用于与GitHub API交互
@@ -10,6 +11,7 @@ export class GitHubClient {
   constructor(token, repo) {
     this.octokit = github.getOctokit(token);
     [this.owner, this.repo] = repo.split('/');
+    this.token = token; // <-- [新增] 保存token以备后用
   }
 
   /**
@@ -350,4 +352,31 @@ export class GitHubClient {
       }
     });
   }
-}
+  /**
+   * [正确位置] downloadFile 函数应该放在这里
+   * 在 addThumbsDownToDiscussionComment 函数之后，
+   * 并且在整个类的最后一个 `}` 之前。
+   * @param {string} fileUrl - 文件的URL
+   * @returns {Promise<Buffer>} - 文件的二进制数据
+   */
+  async downloadFile(fileUrl) {
+    core.info(`正在从 ${fileUrl} 下载文件...`);
+    try {
+      const response = await axios.get(fileUrl, {
+        headers: {
+          'Authorization': `Bearer ${this.token}`,
+          'Accept': 'application/octet-stream'
+        },
+        responseType: 'arraybuffer'
+      });
+      return response.data;
+    } catch (error) {
+      core.error(`下载文件失败: ${error.message}`);
+      throw error;
+    }
+  }
+
+} // <--- 这是 class 的最后一个 `}`
+// (文件末尾不应该再有任何 `}` 了)
+
+

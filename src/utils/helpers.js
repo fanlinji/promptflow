@@ -99,3 +99,18 @@ export async function retry(fn, maxRetries = 3, initialDelay = 1000) {
   
   throw lastError;
 } 
+
+/**
+ * [新增] 从评论内容中提取第一个文件链接的URL
+ * 它会寻找像 [文件名](URL) 这样的 Markdown 链接
+ * @param {string} commentBody - 评论内容
+ * @returns {string|null} - 文件的URL，如果未找到则为null
+ */
+export function extractFileUrl(commentBody) {
+  // 匹配 Markdown 链接格式: [text](url)
+  const regex = /\[.*?\]\((https?:\/\/[^\s)]+)\)/;
+  const match = commentBody.match(regex);
+
+  // 返回捕获组中的 URL 部分
+  return match ? match[1] : null;
+}
