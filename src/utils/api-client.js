@@ -69,40 +69,67 @@ function hasThumbsDownReaction(comment) {
 }
 
 /**
- * [重写] 调用 LLM API，优先处理文件
- * @param {Object} config - 当前使用的API配置
+ * [重写] 调用LLM API，支持多配置和多Key容错
+ * @param {Array} apiConfigs - 所有API配置
  * @param {string} prompt - 文本提示
  * @param {Buffer} [fileBuffer] - 可选的文件二进制数据
  * @param {string} [mimeType] - 可选的文件的MIME类型
  * @returns {Promise<string>} - API响应中提取的文本
  */
 export async function callLlmApi(apiConfigs, prompt, fileBuffer, mimeType) {
-  core.info(`[关键日志 2] callLlmApi 收到的最终配置列表: ${JSON.stringify(apiConfigs, null, 2)}`);
-
-  const geminiConfig = apiConfigs.find(c => c.type === 'gemini');
-  if (!geminiConfig || geminiConfig.keys.length === 0) {
-    throw new Error('当前实现只支持带有有效key的Gemini File API');
+  if (!apiConfigs || apiConfigs.length === 0) {
+    throw new Error('没有可用的API配置');
   }
-  const apiKey = geminiConfig.keys[0];
-  const modelName = geminiConfig.name;
 
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: modelName });
-    const promptParts = [{ text: prompt }];
+  // [修改] 筛选出所有 type 为 'gemini' 的配置，而不仅仅是第一个
+  const geminiConfigs = apiConfigs.filter(c => c.type === 'gemini');
+  if (geminiConfigs.length === 0) {
+    throw new Error('没有找到类型为 "gemini" 的有效API配置');
+  }
 
-    if (fileBuffer && mimeType) {
-      core.info(`正在准备上传 ${mimeType} 文件...`);
-      promptParts.push({ inlineData: { data: fileBuffer.toString("base64"), mimeType } });
+  let lastError = null;
+
+  // 外层循环：遍历所有 Gemini 配置
+  for (const config of geminiConfigs) {
+    core.info(`准备使用模型配置: ${config.name}`);
+
+    // 内层循环：遍历当前配置下的所有 Key
+    for (const apiKey of config.keys) {
+      try {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: config.name });
+
+        const promptParts = [{ text: prompt }];
+
+        if (fileBuffer && mimeType) {
+          core.info(`正在准备上传 ${mimeType} 文件...`);
+          promptParts.push({
+            inlineData: {
+              data: fileBuffer.toString("base64"),
+              mimeType,
+            },
+          });
+        }
+        
+        const result = await model.generateContent({
+            contents: [{ role: "user", parts: promptParts }]
+        });
+
+        const response = result.response;
+        const text = response.text();
+        
+        core.info(`API 调用成功，使用模型: ${config.name}`);
+        return text; // 成功后立刻返回结果，中断所有循环
+
+      } catch (error) {
+        lastError = error;
+        core.warning(`使用模型 ${config.name} 和 Key(***${apiKey.slice(-4)}) 调用失败: ${error.message}`);
+        // 不抛出错误，继续尝试下一个 Key
+      }
     }
-    
-    const result = await model.generateContent({ contents: [{ role: "user", parts: promptParts }] });
-    const response = result.response;
-    const text = response.text();
-    core.info('成功从 Gemini 获取到内容。');
-    return text;
-  } catch (error) {
-    core.error(`调用 Gemini API 失败: ${error.message}`);
-    throw error;
+    // 如果一个配置下的所有 Key 都失败了，会继续尝试下一个配置
   }
+
+  // 如果所有配置的所有 Key 都失败了，才最终抛出错误
+  throw new Error(`所有 Gemini API 调用都失败了。最后一个错误: ${lastError?.message || '未知错误'}`);
 }
